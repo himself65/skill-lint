@@ -1,0 +1,42 @@
+name: 'Skill Lint'
+description: 'Validate Agent Skills (SKILL.md) for Claude.ai, Claude Code, and other agents'
+branding:
+  icon: 'check-circle'
+  color: 'blue'
+
+inputs:
+  path:
+    description: 'Directory to scan for skills'
+    required: false
+    default: '.'
+  quiet:
+    description: 'Only report errors (suppress warnings)'
+    required: false
+    default: 'false'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install dependencies
+      shell: bash
+      run: npm ci
+      working-directory: ${{ github.action_path }}
+
+    - name: Build
+      shell: bash
+      run: npm run build
+      working-directory: ${{ github.action_path }}
+
+    - name: Run skill-lint
+      shell: bash
+      run: |
+        ARGS="${{ inputs.path }}"
+        if [ "${{ inputs.quiet }}" = "true" ]; then
+          ARGS="$ARGS --quiet"
+        fi
+        node ${{ github.action_path }}/dist/cli.js $ARGS

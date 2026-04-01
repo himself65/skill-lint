@@ -1,0 +1,34 @@
+{
+  "name": "skill-lint",
+  "version": "0.1.0",
+  "description": "Lint and validate Agent Skills (SKILL.md) for Claude.ai, Claude Code, and other agents",
+  "main": "dist/index.js",
+  "bin": {
+    "skill-lint": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "tsc --noEmit"
+  },
+  "keywords": [
+    "agent-skills",
+    "claude",
+    "skill-lint",
+    "github-action",
+    "validator"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "dependencies": {
+    "yaml": "^2.7.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
