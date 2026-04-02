@@ -51,9 +51,11 @@ export async function lintSkill(skillDir: string): Promise<SkillValidationResult
 
   // Parse
   let frontmatter;
+  let body: string;
   try {
     const parsed = parseSkillMd(content);
     frontmatter = parsed.frontmatter;
+    body = parsed.body;
   } catch (e) {
     result.diagnostics.push({
       severity: "error",
@@ -67,7 +69,7 @@ export async function lintSkill(skillDir: string): Promise<SkillValidationResult
   }
 
   // Validate
-  const diagnostics = validate(frontmatter, dirName);
+  const diagnostics = validate(frontmatter, dirName, body);
   result.diagnostics.push(...diagnostics);
 
   return result;
