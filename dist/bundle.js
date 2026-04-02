@@ -7413,7 +7413,8 @@ var NAME_MAX_LENGTH = 64;
 var DESCRIPTION_MAX_LENGTH = 1024;
 var COMPATIBILITY_MAX_LENGTH = 500;
 var NAME_PATTERN = /^[a-z0-9-]+$/;
-function validate(frontmatter, dirName) {
+var BODY_MAX_LINES = 500;
+function validate(frontmatter, dirName, body) {
   const diagnostics = [];
   const unexpectedFields = Object.keys(frontmatter).filter(
     (k) => !ALLOWED_FIELDS.has(k)
@@ -7427,11 +7428,27 @@ function validate(frontmatter, dirName) {
   }
   validateName(frontmatter.name, dirName, diagnostics);
   validateDescription(frontmatter.description, diagnostics);
+  if (frontmatter.license !== void 0) {
+    validateLicense(frontmatter.license, diagnostics);
+  }
+  if (frontmatter["allowed-tools"] !== void 0) {
+    validateAllowedTools(frontmatter["allowed-tools"], diagnostics);
+  }
   if (frontmatter.compatibility !== void 0) {
     validateCompatibility(frontmatter.compatibility, diagnostics);
   }
   if (frontmatter.metadata !== void 0) {
     validateMetadata(frontmatter.metadata, diagnostics);
+  }
+  if (body !== void 0) {
+    const lineCount = body.split("\n").length;
+    if (lineCount > BODY_MAX_LINES) {
+      diagnostics.push({
+        severity: "warning",
+        field: "body",
+        message: `SKILL.md body is ${lineCount} lines, which exceeds the recommended ${BODY_MAX_LINES} line limit. Consider moving detailed content to reference files.`
+      });
+    }
   }
   return diagnostics;
 }
@@ -7498,9 +7515,9 @@ function validateName(name, dirName, diagnostics) {
   }
   if (dirName !== void 0 && name !== dirName) {
     diagnostics.push({
-      severity: "warning",
+      severity: "error",
       field: "name",
-      message: `Directory name '${dirName}' does not match skill name '${name}'`
+      message: `Skill name '${name}' must match parent directory name '${dirName}'`
     });
   }
 }
@@ -7550,6 +7567,40 @@ function validateCompatibility(compatibility, diagnostics) {
       severity: "error",
       field: "compatibility",
       message: `Compatibility must be 1-${COMPATIBILITY_MAX_LENGTH} characters (${compatibility.length} chars)`
+    });
+  }
+}
+function validateLicense(license, diagnostics) {
+  if (typeof license !== "string") {
+    diagnostics.push({
+      severity: "error",
+      field: "license",
+      message: "Field 'license' must be a string"
+    });
+    return;
+  }
+  if (license.length === 0) {
+    diagnostics.push({
+      severity: "error",
+      field: "license",
+      message: "Field 'license' must be a non-empty string"
+    });
+  }
+}
+function validateAllowedTools(allowedTools, diagnostics) {
+  if (typeof allowedTools !== "string") {
+    diagnostics.push({
+      severity: "error",
+      field: "allowed-tools",
+      message: "Field 'allowed-tools' must be a space-delimited string"
+    });
+    return;
+  }
+  if (allowedTools.length === 0) {
+    diagnostics.push({
+      severity: "error",
+      field: "allowed-tools",
+      message: "Field 'allowed-tools' must be a non-empty string"
     });
   }
 }
@@ -7614,9 +7665,11 @@ async function lintSkill(skillDir) {
     }
   }
   let frontmatter;
+  let body;
   try {
     const parsed = parseSkillMd(content);
     frontmatter = parsed.frontmatter;
+    body = parsed.body;
   } catch (e) {
     result.diagnostics.push({
       severity: "error",
@@ -7627,7 +7680,7 @@ async function lintSkill(skillDir) {
   if (typeof frontmatter.name === "string") {
     result.name = frontmatter.name;
   }
-  const diagnostics = validate(frontmatter, dirName);
+  const diagnostics = validate(frontmatter, dirName, body);
   result.diagnostics.push(...diagnostics);
   return result;
 }
