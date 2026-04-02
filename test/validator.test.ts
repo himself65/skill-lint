@@ -88,10 +88,14 @@ describe("validate", () => {
       );
     });
 
-    it("warns when name does not match directory", () => {
-      const d = warnings({ name: "my-skill", description: "A skill." }, "other-dir");
+    it("errors when name does not match directory", () => {
+      const d = errors({ name: "my-skill", description: "A skill." }, "other-dir");
       expect(d).toContainEqual(
-        expect.objectContaining({ message: expect.stringContaining("does not match") })
+        expect.objectContaining({
+          severity: "error",
+          field: "name",
+          message: expect.stringContaining("must match parent directory"),
+        })
       );
     });
   });
@@ -178,6 +182,66 @@ describe("validate", () => {
       expect(d).toContainEqual(
         expect.objectContaining({ message: expect.stringContaining("1-500 characters") })
       );
+    });
+  });
+
+  describe("license", () => {
+    it("accepts a valid license string", () => {
+      const d = errors({ name: "test", description: "A skill.", license: "MIT" });
+      expect(d).toHaveLength(0);
+    });
+
+    it("rejects non-string license", () => {
+      const d = errors({ name: "test", description: "A skill.", license: 123 });
+      expect(d).toContainEqual(
+        expect.objectContaining({ field: "license", message: expect.stringContaining("must be a string") })
+      );
+    });
+
+    it("rejects empty license", () => {
+      const d = errors({ name: "test", description: "A skill.", license: "" });
+      expect(d).toContainEqual(
+        expect.objectContaining({ field: "license", message: expect.stringContaining("non-empty") })
+      );
+    });
+  });
+
+  describe("allowed-tools", () => {
+    it("accepts a valid allowed-tools string", () => {
+      const d = errors({ name: "test", description: "A skill.", "allowed-tools": "Bash Read" });
+      expect(d).toHaveLength(0);
+    });
+
+    it("rejects non-string allowed-tools", () => {
+      const d = errors({ name: "test", description: "A skill.", "allowed-tools": ["Bash"] });
+      expect(d).toContainEqual(
+        expect.objectContaining({ field: "allowed-tools", message: expect.stringContaining("space-delimited string") })
+      );
+    });
+
+    it("rejects empty allowed-tools", () => {
+      const d = errors({ name: "test", description: "A skill.", "allowed-tools": "" });
+      expect(d).toContainEqual(
+        expect.objectContaining({ field: "allowed-tools", message: expect.stringContaining("non-empty") })
+      );
+    });
+  });
+
+  describe("body", () => {
+    it("warns when body exceeds 500 lines", () => {
+      const longBody = "\n".repeat(501);
+      const d = validate({ name: "test", description: "A skill." }, undefined, longBody);
+      const bodyWarnings = d.filter((dd) => dd.field === "body");
+      expect(bodyWarnings).toContainEqual(
+        expect.objectContaining({ severity: "warning", message: expect.stringContaining("exceeds the recommended 500 line limit") })
+      );
+    });
+
+    it("does not warn when body is under 500 lines", () => {
+      const shortBody = "Some content\n".repeat(100);
+      const d = validate({ name: "test", description: "A skill." }, undefined, shortBody);
+      const bodyWarnings = d.filter((dd) => dd.field === "body");
+      expect(bodyWarnings).toHaveLength(0);
     });
   });
 

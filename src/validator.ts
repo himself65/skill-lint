@@ -15,15 +15,18 @@ const NAME_MAX_LENGTH = 64;
 const DESCRIPTION_MAX_LENGTH = 1024;
 const COMPATIBILITY_MAX_LENGTH = 500;
 const NAME_PATTERN = /^[a-z0-9-]+$/;
+const BODY_MAX_LINES = 500;
 
 /**
  * Validate a parsed SKILL.md frontmatter and return diagnostics.
  * @param frontmatter - Parsed frontmatter object
  * @param dirName - The parent directory name (to check name match)
+ * @param body - The markdown body content (to check line count)
  */
 export function validate(
   frontmatter: SkillFrontmatter,
-  dirName?: string
+  dirName?: string,
+  body?: string
 ): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
 
@@ -45,6 +48,16 @@ export function validate(
   // Validate description
   validateDescription(frontmatter.description, diagnostics);
 
+  // Validate license
+  if (frontmatter.license !== undefined) {
+    validateLicense(frontmatter.license, diagnostics);
+  }
+
+  // Validate allowed-tools
+  if (frontmatter["allowed-tools"] !== undefined) {
+    validateAllowedTools(frontmatter["allowed-tools"], diagnostics);
+  }
+
   // Validate compatibility
   if (frontmatter.compatibility !== undefined) {
     validateCompatibility(frontmatter.compatibility, diagnostics);
@@ -53,6 +66,18 @@ export function validate(
   // Validate metadata
   if (frontmatter.metadata !== undefined) {
     validateMetadata(frontmatter.metadata, diagnostics);
+  }
+
+  // Validate body line count
+  if (body !== undefined) {
+    const lineCount = body.split("\n").length;
+    if (lineCount > BODY_MAX_LINES) {
+      diagnostics.push({
+        severity: "warning",
+        field: "body",
+        message: `SKILL.md body is ${lineCount} lines, which exceeds the recommended ${BODY_MAX_LINES} line limit. Consider moving detailed content to reference files.`,
+      });
+    }
   }
 
   return diagnostics;
@@ -133,9 +158,9 @@ function validateName(
 
   if (dirName !== undefined && name !== dirName) {
     diagnostics.push({
-      severity: "warning",
+      severity: "error",
       field: "name",
-      message: `Directory name '${dirName}' does not match skill name '${name}'`,
+      message: `Skill name '${name}' must match parent directory name '${dirName}'`,
     });
   }
 }
@@ -197,6 +222,50 @@ function validateCompatibility(
       severity: "error",
       field: "compatibility",
       message: `Compatibility must be 1-${COMPATIBILITY_MAX_LENGTH} characters (${compatibility.length} chars)`,
+    });
+  }
+}
+
+function validateLicense(
+  license: unknown,
+  diagnostics: Diagnostic[]
+): void {
+  if (typeof license !== "string") {
+    diagnostics.push({
+      severity: "error",
+      field: "license",
+      message: "Field 'license' must be a string",
+    });
+    return;
+  }
+
+  if (license.length === 0) {
+    diagnostics.push({
+      severity: "error",
+      field: "license",
+      message: "Field 'license' must be a non-empty string",
+    });
+  }
+}
+
+function validateAllowedTools(
+  allowedTools: unknown,
+  diagnostics: Diagnostic[]
+): void {
+  if (typeof allowedTools !== "string") {
+    diagnostics.push({
+      severity: "error",
+      field: "allowed-tools",
+      message: "Field 'allowed-tools' must be a space-delimited string",
+    });
+    return;
+  }
+
+  if (allowedTools.length === 0) {
+    diagnostics.push({
+      severity: "error",
+      field: "allowed-tools",
+      message: "Field 'allowed-tools' must be a non-empty string",
     });
   }
 }
