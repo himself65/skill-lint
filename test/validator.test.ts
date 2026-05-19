@@ -1,13 +1,32 @@
 import { describe, it, expect } from "vitest";
-import { validate } from "../src/validator.js";
-import type { SkillFrontmatter } from "../src/types.js";
+import { extractBodyReferences, validate } from "../src/validator.js";
+import type { SkillFrontmatter, ValidateOptions } from "../src/types.js";
 
-function errors(fm: SkillFrontmatter, dirName?: string) {
-  return validate(fm, dirName).filter((d) => d.severity === "error");
+function diagnostics(
+  fm: SkillFrontmatter,
+  dirName?: string,
+  body?: string,
+  options?: ValidateOptions
+) {
+  return validate(fm, dirName, body, options);
 }
 
-function warnings(fm: SkillFrontmatter, dirName?: string) {
-  return validate(fm, dirName).filter((d) => d.severity === "warning");
+function errors(
+  fm: SkillFrontmatter,
+  dirName?: string,
+  body?: string,
+  options?: ValidateOptions
+) {
+  return diagnostics(fm, dirName, body, options).filter((d) => d.severity === "error");
+}
+
+function warnings(
+  fm: SkillFrontmatter,
+  dirName?: string,
+  body?: string,
+  options?: ValidateOptions
+) {
+  return diagnostics(fm, dirName, body, options).filter((d) => d.severity === "warning");
 }
 
 describe("validate", () => {
@@ -74,20 +93,6 @@ describe("validate", () => {
       );
     });
 
-    it("rejects reserved word 'claude'", () => {
-      const d = errors({ name: "my-claude-tool", description: "A skill." });
-      expect(d).toContainEqual(
-        expect.objectContaining({ message: expect.stringContaining("reserved word 'claude'") })
-      );
-    });
-
-    it("rejects reserved word 'anthropic'", () => {
-      const d = errors({ name: "anthropic-helper", description: "A skill." });
-      expect(d).toContainEqual(
-        expect.objectContaining({ message: expect.stringContaining("reserved word 'anthropic'") })
-      );
-    });
-
     it("errors when name does not match directory", () => {
       const d = errors({ name: "my-skill", description: "A skill." }, "other-dir");
       expect(d).toContainEqual(
@@ -96,6 +101,35 @@ describe("validate", () => {
           field: "name",
           message: expect.stringContaining("must match parent directory"),
         })
+      );
+    });
+
+    it("does not flag reserved words 'claude'/'anthropic' by default (spec compliance)", () => {
+      const d = errors({ name: "my-claude-tool", description: "A skill." });
+      expect(d.some((e) => e.message.includes("reserved word"))).toBe(false);
+    });
+
+    it("flags reserved word 'claude' when --claude is enabled", () => {
+      const d = errors(
+        { name: "my-claude-tool", description: "A skill." },
+        undefined,
+        undefined,
+        { claude: true }
+      );
+      expect(d).toContainEqual(
+        expect.objectContaining({ message: expect.stringContaining("reserved word 'claude'") })
+      );
+    });
+
+    it("flags reserved word 'anthropic' when --claude is enabled", () => {
+      const d = errors(
+        { name: "anthropic-helper", description: "A skill." },
+        undefined,
+        undefined,
+        { claude: true }
+      );
+      expect(d).toContainEqual(
+        expect.objectContaining({ message: expect.stringContaining("reserved word 'anthropic'") })
       );
     });
   });
@@ -128,8 +162,18 @@ describe("validate", () => {
       );
     });
 
-    it("rejects description with angle brackets", () => {
+    it("does not flag angle brackets by default (spec compliance)", () => {
       const d = errors({ name: "test", description: "Uses <html> tags." });
+      expect(d.some((e) => e.message.includes("angle brackets"))).toBe(false);
+    });
+
+    it("flags angle brackets when --claude is enabled", () => {
+      const d = errors(
+        { name: "test", description: "Uses <html> tags." },
+        undefined,
+        undefined,
+        { claude: true }
+      );
       expect(d).toContainEqual(
         expect.objectContaining({ message: expect.stringContaining("angle brackets") })
       );
@@ -230,18 +274,50 @@ describe("validate", () => {
   describe("body", () => {
     it("warns when body exceeds 500 lines", () => {
       const longBody = "\n".repeat(501);
-      const d = validate({ name: "test", description: "A skill." }, undefined, longBody);
+      const d = diagnostics({ name: "test", description: "A skill." }, undefined, longBody);
       const bodyWarnings = d.filter((dd) => dd.field === "body");
       expect(bodyWarnings).toContainEqual(
         expect.objectContaining({ severity: "warning", message: expect.stringContaining("exceeds the recommended 500 line limit") })
       );
     });
 
-    it("does not warn when body is under 500 lines", () => {
+    it("warns when estimated tokens exceed 5000 even on few lines", () => {
+      // ~21000 chars on a single line ≈ ~5250 tokens, but only one line
+      const tokenHeavy = "x".repeat(21000);
+      const d = diagnostics({ name: "test", description: "A skill." }, undefined, tokenHeavy);
+      const bodyWarnings = d.filter((dd) => dd.field === "body");
+      expect(bodyWarnings).toContainEqual(
+        expect.objectContaining({ severity: "warning", message: expect.stringContaining("token") })
+      );
+    });
+
+    it("does not warn when body is small", () => {
       const shortBody = "Some content\n".repeat(100);
-      const d = validate({ name: "test", description: "A skill." }, undefined, shortBody);
+      const d = diagnostics({ name: "test", description: "A skill." }, undefined, shortBody);
       const bodyWarnings = d.filter((dd) => dd.field === "body");
       expect(bodyWarnings).toHaveLength(0);
+    });
+
+    it("warns when a reference is more than one directory deep", () => {
+      const body = "See [deep](references/sub/deep.md) for more.";
+      const w = warnings({ name: "test", description: "A skill." }, undefined, body);
+      expect(w).toContainEqual(
+        expect.objectContaining({ message: expect.stringContaining("more than one directory deep") })
+      );
+    });
+
+    it("does not warn for one-level-deep references", () => {
+      const body = "See [guide](references/GUIDE.md) for more.";
+      const w = warnings({ name: "test", description: "A skill." }, undefined, body);
+      expect(w.some((d) => d.message.includes("directory deep"))).toBe(false);
+    });
+
+    it("warns when reference escapes the skill directory", () => {
+      const body = "See [escape](../outside.md) for more.";
+      const w = warnings({ name: "test", description: "A skill." }, undefined, body);
+      expect(w).toContainEqual(
+        expect.objectContaining({ message: expect.stringContaining("escapes the skill directory") })
+      );
     });
   });
 
@@ -259,5 +335,20 @@ describe("validate", () => {
         expect.objectContaining({ message: expect.stringContaining("must be a mapping") })
       );
     });
+  });
+});
+
+describe("extractBodyReferences", () => {
+  it("extracts relative markdown link targets", () => {
+    const body = "See [guide](references/GUIDE.md) and [script](scripts/run.py).";
+    expect(extractBodyReferences(body)).toEqual([
+      "references/GUIDE.md",
+      "scripts/run.py",
+    ]);
+  });
+
+  it("ignores absolute URLs, anchors, and mailto links", () => {
+    const body = `[home](https://agentskills.io) [anchor](#section) [mail](mailto:x@y.z) [abs](/etc/hosts)`;
+    expect(extractBodyReferences(body)).toEqual([]);
   });
 });
