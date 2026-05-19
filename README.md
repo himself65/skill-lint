@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: himself65/skill-lint@v1
+      - uses: himself65/skill-lint@v3
         with:
           path: 'skills'  # directory containing skill folders (default: '.')
           claude: 'false' # set to 'true' to enable Claude.ai-specific checks
