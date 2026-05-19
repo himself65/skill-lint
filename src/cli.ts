@@ -33,16 +33,20 @@ Arguments:
 Options:
   --help, -h    Show this help message
   --json        Output results as JSON
-  --quiet, -q   Only show errors, suppress warnings`);
+  --quiet, -q   Only show errors, suppress warnings
+  --claude      Enable Claude.ai-specific checks (reserved-word names,
+                angle brackets in description) — not part of the
+                agentskills.io spec`);
     process.exit(0);
   }
 
   const jsonOutput = args.includes("--json");
   const quiet = args.includes("--quiet") || args.includes("-q");
+  const claude = args.includes("--claude");
   const pathArg = args.find((a) => !a.startsWith("-"));
   const rootPath = resolve(pathArg || ".");
 
-  const result = await lintSkills(rootPath);
+  const result = await lintSkills(rootPath, { claude });
 
   if (jsonOutput) {
     console.log(JSON.stringify(result, null, 2));

@@ -31,8 +31,14 @@ describe("lintSkill", () => {
     expect(errors.some((e) => e.message.includes("1024 character limit"))).toBe(true);
   });
 
-  it("reports angle brackets in description", async () => {
+  it("does NOT report angle brackets by default (spec compliance)", async () => {
     const result = await lintSkill(join(FIXTURES, "angle-brackets"));
+    const errors = result.diagnostics.filter((d) => d.severity === "error");
+    expect(errors.some((e) => e.message.includes("angle brackets"))).toBe(false);
+  });
+
+  it("reports angle brackets when --claude is enabled", async () => {
+    const result = await lintSkill(join(FIXTURES, "angle-brackets"), { claude: true });
     const errors = result.diagnostics.filter((d) => d.severity === "error");
     expect(errors.some((e) => e.message.includes("angle brackets"))).toBe(true);
   });
@@ -43,8 +49,14 @@ describe("lintSkill", () => {
     expect(errors.some((e) => e.message.includes("Unexpected fields"))).toBe(true);
   });
 
-  it("reports reserved word in name", async () => {
-    const result = await lintSkill(join(FIXTURES, "reserved-name"));
+  it("does NOT report reserved word in name by default (spec compliance)", async () => {
+    const result = await lintSkill(join(FIXTURES, "claude-name"));
+    const errors = result.diagnostics.filter((d) => d.severity === "error");
+    expect(errors.some((e) => e.message.includes("reserved word"))).toBe(false);
+  });
+
+  it("reports reserved word in name when --claude is enabled", async () => {
+    const result = await lintSkill(join(FIXTURES, "claude-name"), { claude: true });
     const errors = result.diagnostics.filter((d) => d.severity === "error");
     expect(errors.some((e) => e.message.includes("reserved word"))).toBe(true);
   });
@@ -59,6 +71,28 @@ describe("lintSkill", () => {
     const result = await lintSkill(join(FIXTURES, "empty-dir"));
     const errors = result.diagnostics.filter((d) => d.severity === "error");
     expect(errors.some((e) => e.message.includes("Missing required file"))).toBe(true);
+  });
+
+  it("warns on deeply nested references", async () => {
+    const result = await lintSkill(join(FIXTURES, "deep-references"));
+    const warnings = result.diagnostics.filter((d) => d.severity === "warning");
+    expect(warnings.some((w) => w.message.includes("more than one directory deep"))).toBe(true);
+  });
+
+  it("warns on references that do not exist on disk", async () => {
+    const result = await lintSkill(join(FIXTURES, "missing-references"));
+    const warnings = result.diagnostics.filter((d) => d.severity === "warning");
+    expect(warnings.some((w) => w.message.includes("does not exist"))).toBe(true);
+  });
+
+  it("passes a skill whose references exist on disk", async () => {
+    const result = await lintSkill(join(FIXTURES, "with-references"));
+    const errors = result.diagnostics.filter((d) => d.severity === "error");
+    const refWarnings = result.diagnostics.filter(
+      (d) => d.severity === "warning" && d.message.includes("does not exist")
+    );
+    expect(errors).toHaveLength(0);
+    expect(refWarnings).toHaveLength(0);
   });
 });
 

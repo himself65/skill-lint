@@ -32,3 +32,14 @@ export interface LintResult {
   /** Total warning count across all skills */
   warningCount: number;
 }
+
+export interface ValidateOptions {
+  /**
+   * Enable Claude.ai-specific checks (reserved-word names, angle brackets in description).
+   * These are NOT part of the agentskills.io spec.
+   * @default false
+   */
+  claude?: boolean;
+}
+
+export interface LintOptions extends ValidateOptions {}

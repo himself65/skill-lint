@@ -13,6 +13,10 @@ inputs:
     description: 'Only report errors (suppress warnings)'
     required: false
     default: 'false'
+  claude:
+    description: 'Enable Claude.ai-specific checks (reserved-word names, angle brackets in description). Not part of the agentskills.io spec.'
+    required: false
+    default: 'false'
 
 runs:
   using: 'composite'
@@ -23,5 +27,8 @@ runs:
         ARGS="${{ inputs.path }}"
         if [ "${{ inputs.quiet }}" = "true" ]; then
           ARGS="$ARGS --quiet"
+        fi
+        if [ "${{ inputs.claude }}" = "true" ]; then
+          ARGS="$ARGS --claude"
         fi
         node ${{ github.action_path }}/dist/bundle.js $ARGS

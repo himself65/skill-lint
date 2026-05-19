@@ -7408,14 +7408,38 @@ var ALLOWED_FIELDS = /* @__PURE__ */ new Set([
   "metadata",
   "compatibility"
 ]);
-var RESERVED_WORDS = ["anthropic", "claude"];
+var CLAUDE_RESERVED_WORDS = ["anthropic", "claude"];
 var NAME_MAX_LENGTH = 64;
 var DESCRIPTION_MAX_LENGTH = 1024;
 var COMPATIBILITY_MAX_LENGTH = 500;
 var NAME_PATTERN = /^[a-z0-9-]+$/;
 var BODY_MAX_LINES = 500;
-function validate(frontmatter, dirName, body) {
+var BODY_MAX_TOKENS = 5e3;
+var CHARS_PER_TOKEN = 4;
+function estimateTokens(text) {
+  return Math.ceil(text.length / CHARS_PER_TOKEN);
+}
+function extractBodyReferences(body) {
+  const refs = [];
+  const linkRegex = /\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
+  let match;
+  while ((match = linkRegex.exec(body)) !== null) {
+    const target = match[1].trim();
+    if (!target) continue;
+    if (/^[a-z][a-z0-9+.-]*:/i.test(target)) continue;
+    if (target.startsWith("#")) continue;
+    if (target.startsWith("/")) continue;
+    refs.push(target);
+  }
+  return refs;
+}
+function pathSegments(ref) {
+  const clean = ref.split("#")[0].split("?")[0];
+  return clean.split("/").filter((s) => s.length > 0 && s !== ".");
+}
+function validate(frontmatter, dirName, body, options = {}) {
   const diagnostics = [];
+  const claude = options.claude ?? false;
   const unexpectedFields = Object.keys(frontmatter).filter(
     (k) => !ALLOWED_FIELDS.has(k)
   );
@@ -7426,8 +7450,8 @@ function validate(frontmatter, dirName, body) {
       message: `Unexpected fields in frontmatter: ${unexpectedFields.join(", ")}. Only ${[...ALLOWED_FIELDS].sort().join(", ")} are allowed.`
     });
   }
-  validateName(frontmatter.name, dirName, diagnostics);
-  validateDescription(frontmatter.description, diagnostics);
+  validateName(frontmatter.name, dirName, diagnostics, claude);
+  validateDescription(frontmatter.description, diagnostics, claude);
   if (frontmatter.license !== void 0) {
     validateLicense(frontmatter.license, diagnostics);
   }
@@ -7441,18 +7465,11 @@ function validate(frontmatter, dirName, body) {
     validateMetadata(frontmatter.metadata, diagnostics);
   }
   if (body !== void 0) {
-    const lineCount = body.split("\n").length;
-    if (lineCount > BODY_MAX_LINES) {
-      diagnostics.push({
-        severity: "warning",
-        field: "body",
-        message: `SKILL.md body is ${lineCount} lines, which exceeds the recommended ${BODY_MAX_LINES} line limit. Consider moving detailed content to reference files.`
-      });
-    }
+    validateBody(body, diagnostics);
   }
   return diagnostics;
 }
-function validateName(name, dirName, diagnostics) {
+function validateName(name, dirName, diagnostics, claude) {
   if (name === void 0 || name === null) {
     diagnostics.push({
       severity: "error",
@@ -7504,13 +7521,15 @@ function validateName(name, dirName, diagnostics) {
       message: "Skill name cannot contain consecutive hyphens"
     });
   }
-  for (const reserved of RESERVED_WORDS) {
-    if (name.includes(reserved)) {
-      diagnostics.push({
-        severity: "error",
-        field: "name",
-        message: `Skill name cannot contain reserved word '${reserved}'`
-      });
+  if (claude) {
+    for (const reserved of CLAUDE_RESERVED_WORDS) {
+      if (name.includes(reserved)) {
+        diagnostics.push({
+          severity: "error",
+          field: "name",
+          message: `Skill name cannot contain reserved word '${reserved}' (Claude.ai-specific)`
+        });
+      }
     }
   }
   if (dirName !== void 0 && name !== dirName) {
@@ -7521,7 +7540,7 @@ function validateName(name, dirName, diagnostics) {
     });
   }
 }
-function validateDescription(description, diagnostics) {
+function validateDescription(description, diagnostics, claude) {
   if (description === void 0 || description === null) {
     diagnostics.push({
       severity: "error",
@@ -7545,11 +7564,11 @@ function validateDescription(description, diagnostics) {
       message: `Description exceeds ${DESCRIPTION_MAX_LENGTH} character limit (${description.length} chars)`
     });
   }
-  if (/<|>/.test(description)) {
+  if (claude && /<|>/.test(description)) {
     diagnostics.push({
       severity: "error",
       field: "description",
-      message: "Description cannot contain angle brackets (< or >)"
+      message: "Description cannot contain angle brackets (< or >) (Claude.ai-specific)"
     });
   }
 }
@@ -7630,15 +7649,50 @@ function validateMetadata(metadata, diagnostics) {
     }
   }
 }
+function validateBody(body, diagnostics) {
+  const lineCount = body.split("\n").length;
+  const tokens = estimateTokens(body);
+  if (lineCount > BODY_MAX_LINES) {
+    diagnostics.push({
+      severity: "warning",
+      field: "body",
+      message: `SKILL.md body is ${lineCount} lines, which exceeds the recommended ${BODY_MAX_LINES} line limit. The spec recommends keeping SKILL.md under ~${BODY_MAX_TOKENS} tokens \u2014 move detailed content to reference files.`
+    });
+  } else if (tokens > BODY_MAX_TOKENS) {
+    diagnostics.push({
+      severity: "warning",
+      field: "body",
+      message: `SKILL.md body is ~${tokens} estimated tokens, which exceeds the recommended ~${BODY_MAX_TOKENS} token limit. Move detailed content to reference files.`
+    });
+  }
+  for (const ref of extractBodyReferences(body)) {
+    const segments = pathSegments(ref);
+    if (segments.includes("..")) {
+      diagnostics.push({
+        severity: "warning",
+        field: "body",
+        message: `Reference '${ref}' escapes the skill directory. Keep references inside the skill root.`
+      });
+      continue;
+    }
+    if (segments.length > 2) {
+      diagnostics.push({
+        severity: "warning",
+        field: "body",
+        message: `Reference '${ref}' is more than one directory deep. The spec recommends keeping file references one level deep from SKILL.md.`
+      });
+    }
+  }
+}
 
 // src/lint.ts
-async function lintSkills(rootPath) {
+async function lintSkills(rootPath, options = {}) {
   const skillDirs = await discoverSkills(rootPath);
   const skills = [];
   let errorCount = 0;
   let warningCount = 0;
   for (const skillDir of skillDirs) {
-    const result = await lintSkill(skillDir);
+    const result = await lintSkill(skillDir, options);
     skills.push(result);
     for (const d of result.diagnostics) {
       if (d.severity === "error") errorCount++;
@@ -7647,7 +7701,7 @@ async function lintSkills(rootPath) {
   }
   return { skills, errorCount, warningCount };
 }
-async function lintSkill(skillDir) {
+async function lintSkill(skillDir, options = {}) {
   const dirName = (0, import_node_path2.basename)(skillDir);
   const result = { path: skillDir, diagnostics: [] };
   let content;
@@ -7680,9 +7734,31 @@ async function lintSkill(skillDir) {
   if (typeof frontmatter.name === "string") {
     result.name = frontmatter.name;
   }
-  const diagnostics = validate(frontmatter, dirName, body);
+  const diagnostics = validate(frontmatter, dirName, body, options);
   result.diagnostics.push(...diagnostics);
+  await checkReferenceExistence(skillDir, body, result);
   return result;
+}
+async function checkReferenceExistence(skillDir, body, result) {
+  const skillRoot = (0, import_node_path2.resolve)(skillDir);
+  const seen = /* @__PURE__ */ new Set();
+  for (const ref of extractBodyReferences(body)) {
+    const cleanRef = ref.split("#")[0].split("?")[0];
+    if (!cleanRef || seen.has(cleanRef)) continue;
+    seen.add(cleanRef);
+    if ((0, import_node_path2.isAbsolute)(cleanRef)) continue;
+    const resolved = (0, import_node_path2.resolve)(skillRoot, cleanRef);
+    if (!resolved.startsWith(skillRoot)) continue;
+    try {
+      await (0, import_promises2.access)(resolved);
+    } catch {
+      result.diagnostics.push({
+        severity: "warning",
+        field: "body",
+        message: `Reference '${ref}' does not exist in the skill directory.`
+      });
+    }
+  }
 }
 
 // src/cli.ts
@@ -7712,14 +7788,18 @@ Arguments:
 Options:
   --help, -h    Show this help message
   --json        Output results as JSON
-  --quiet, -q   Only show errors, suppress warnings`);
+  --quiet, -q   Only show errors, suppress warnings
+  --claude      Enable Claude.ai-specific checks (reserved-word names,
+                angle brackets in description) \u2014 not part of the
+                agentskills.io spec`);
     process.exit(0);
   }
   const jsonOutput = args.includes("--json");
   const quiet = args.includes("--quiet") || args.includes("-q");
+  const claude = args.includes("--claude");
   const pathArg = args.find((a) => !a.startsWith("-"));
   const rootPath = (0, import_node_path3.resolve)(pathArg || ".");
-  const result = await lintSkills(rootPath);
+  const result = await lintSkills(rootPath, { claude });
   if (jsonOutput) {
     console.log(JSON.stringify(result, null, 2));
   } else {
