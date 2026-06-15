@@ -151,6 +151,12 @@ describe("lintSkill", () => {
     const result = await lintSkill(join(FIXTURES, "unicode-name", "数据分析"));
     expect(result.diagnostics.filter((d) => d.severity === "error")).toHaveLength(0);
   });
+
+  it("passes a realistic social source review skill", async () => {
+    const result = await lintSkill(join(FIXTURES, "social-source-review"), { claude: true });
+    expect(result.name).toBe("social-source-review");
+    expect(result.diagnostics).toHaveLength(0);
+  });
 });
 
 describe("lintSkills", () => {
