@@ -1,6 +1,6 @@
 {
   "name": "skill-lint",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "Lint and validate Agent Skills (SKILL.md) for Claude.ai, Claude Code, and other agents",
   "main": "dist/index.js",
   "bin": {
