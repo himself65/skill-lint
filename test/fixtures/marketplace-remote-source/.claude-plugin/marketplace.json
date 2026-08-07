@@ -1,0 +1,6 @@
+{
+  "name": "demo",
+  "plugins": [
+    { "name": "remote", "source": "https://example.com/p.git", "version": "9.9.9" }
+  ]
+}

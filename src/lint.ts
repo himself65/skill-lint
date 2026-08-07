@@ -1,9 +1,15 @@
 import { access, readFile } from "node:fs/promises";
 import { basename, isAbsolute, join, resolve } from "node:path";
 import { discoverSkills } from "./discovery.js";
+import { findMarketplaceManifest, validateMarketplace } from "./marketplace.js";
 import { parseSkillMd } from "./parser.js";
 import { extractBodyReferences, validate } from "./validator.js";
-import type { LintOptions, LintResult, SkillValidationResult } from "./types.js";
+import type {
+  LintOptions,
+  LintResult,
+  MarketplaceValidationResult,
+  SkillValidationResult,
+} from "./types.js";
 
 /**
  * Lint all skills found under the given root path.
@@ -26,7 +32,21 @@ export async function lintSkills(
     }
   }
 
-  return { skills, errorCount, warningCount };
+  let marketplace: MarketplaceValidationResult | undefined;
+  if (options.marketplace !== false) {
+    const manifestPath = await findMarketplaceManifest(rootPath);
+    if (manifestPath) {
+      marketplace = await validateMarketplace(manifestPath);
+      for (const d of marketplace.diagnostics) {
+        if (d.severity === "error") errorCount++;
+        else warningCount++;
+      }
+    }
+  }
+
+  return marketplace
+    ? { skills, marketplace, errorCount, warningCount }
+    : { skills, errorCount, warningCount };
 }
 
 /**

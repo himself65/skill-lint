@@ -36,22 +36,27 @@ Options:
   --quiet, -q   Only show errors, suppress warnings
   --claude      Enable Claude.ai-specific checks (reserved-word names,
                 angle brackets in description) — not part of the
-                agentskills.io spec`);
+                agentskills.io spec
+  --no-marketplace
+                Skip the .claude-plugin/marketplace.json version-drift
+                check (it is auto-detected and skipped anyway when no
+                manifest exists)`);
     process.exit(0);
   }
 
   const jsonOutput = args.includes("--json");
   const quiet = args.includes("--quiet") || args.includes("-q");
   const claude = args.includes("--claude");
+  const marketplace = !args.includes("--no-marketplace");
   const pathArg = args.find((a) => !a.startsWith("-"));
   const rootPath = resolve(pathArg || ".");
 
-  const result = await lintSkills(rootPath, { claude });
+  const result = await lintSkills(rootPath, { claude, marketplace });
 
   if (jsonOutput) {
     console.log(JSON.stringify(result, null, 2));
   } else {
-    if (result.skills.length === 0) {
+    if (result.skills.length === 0 && !result.marketplace) {
       console.log(`${COLORS.yellow}No skills found in ${rootPath}${COLORS.reset}`);
       process.exit(0);
     }
@@ -76,6 +81,25 @@ Options:
       console.log();
     }
 
+    if (result.marketplace) {
+      const mp = result.marketplace;
+      const filtered = quiet
+        ? mp.diagnostics.filter((d) => d.severity === "error")
+        : mp.diagnostics;
+
+      if (filtered.length === 0) {
+        if (!quiet) {
+          console.log(`${COLORS.green}pass${COLORS.reset} marketplace`);
+        }
+      } else {
+        console.log(`${COLORS.bold}marketplace${COLORS.reset} ${COLORS.dim}(${mp.path})${COLORS.reset}`);
+        for (const d of filtered) {
+          console.log(formatDiagnostic(d));
+        }
+        console.log();
+      }
+    }
+
     // Summary
     const parts: string[] = [];
     if (result.errorCount > 0) {
@@ -86,9 +110,12 @@ Options:
     }
     if (parts.length > 0) {
       console.log(parts.join(", "));
+    } else if (result.skills.length === 0) {
+      console.log(`${COLORS.green}Marketplace manifest passed${COLORS.reset}`);
     } else {
+      const suffix = result.marketplace ? " and the marketplace manifest" : "";
       console.log(
-        `${COLORS.green}All ${result.skills.length} skill${result.skills.length === 1 ? "" : "s"} passed${COLORS.reset}`
+        `${COLORS.green}All ${result.skills.length} skill${result.skills.length === 1 ? "" : "s"}${suffix} passed${COLORS.reset}`
       );
     }
   }

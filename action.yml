@@ -17,6 +17,10 @@ inputs:
     description: 'Enable Claude.ai-specific checks (reserved-word names, angle brackets in description). Not part of the agentskills.io spec.'
     required: false
     default: 'false'
+  marketplace:
+    description: 'Check .claude-plugin/marketplace.json for version drift against the plugin manifests it points at. Auto-detected — repositories without a manifest are unaffected. Set to false to skip.'
+    required: false
+    default: 'true'
 
 runs:
   using: 'composite'
@@ -30,5 +34,8 @@ runs:
         fi
         if [ "${{ inputs.claude }}" = "true" ]; then
           ARGS="$ARGS --claude"
+        fi
+        if [ "${{ inputs.marketplace }}" = "false" ]; then
+          ARGS="$ARGS --no-marketplace"
         fi
         node ${{ github.action_path }}/dist/bundle.js $ARGS

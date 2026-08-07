@@ -25,11 +25,24 @@ export interface SkillValidationResult {
   diagnostics: Diagnostic[];
 }
 
+export interface MarketplaceValidationResult {
+  /** Path to the `.claude-plugin/marketplace.json` that was checked */
+  path: string;
+  /** List of diagnostics (errors and warnings) */
+  diagnostics: Diagnostic[];
+}
+
 export interface LintResult {
   skills: SkillValidationResult[];
-  /** Total error count across all skills */
+  /**
+   * Result of the plugin marketplace check, present only when a
+   * `.claude-plugin/marketplace.json` was found at or above the scan root.
+   * Absent for repositories that are not plugin marketplaces.
+   */
+  marketplace?: MarketplaceValidationResult;
+  /** Total error count across all skills and the marketplace manifest */
   errorCount: number;
-  /** Total warning count across all skills */
+  /** Total warning count across all skills and the marketplace manifest */
   warningCount: number;
 }
 
@@ -42,4 +55,12 @@ export interface ValidateOptions {
   claude?: boolean;
 }
 
-export interface LintOptions extends ValidateOptions {}
+export interface LintOptions extends ValidateOptions {
+  /**
+   * Check `.claude-plugin/marketplace.json` (when one exists at or above the
+   * scan root) for version drift against the plugin manifests it points at.
+   * Auto-detected, so repositories without a manifest are unaffected.
+   * @default true
+   */
+  marketplace?: boolean;
+}
