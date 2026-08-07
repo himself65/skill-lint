@@ -1,0 +1,7 @@
+{
+  "name": "demo",
+  "metadata": { "version": "1.2.0" },
+  "plugins": [
+    { "name": "demo", "source": "./plugins/demo", "version": "1.2.0" }
+  ]
+}

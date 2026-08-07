@@ -7329,11 +7329,11 @@ var require_dist = __commonJS({
 });
 
 // src/cli.ts
-var import_node_path3 = require("node:path");
+var import_node_path4 = require("node:path");
 
 // src/lint.ts
-var import_promises2 = require("node:fs/promises");
-var import_node_path2 = require("node:path");
+var import_promises3 = require("node:fs/promises");
+var import_node_path3 = require("node:path");
 
 // src/discovery.ts
 var import_promises = require("node:fs/promises");
@@ -7372,6 +7372,131 @@ async function walk(dir, depth, results) {
     if (entry.name.startsWith(".")) continue;
     await walk((0, import_node_path.join)(dir, entry.name), depth + 1, results);
   }
+}
+
+// src/marketplace.ts
+var import_promises2 = require("node:fs/promises");
+var import_node_path2 = require("node:path");
+var MANIFEST_DIR = ".claude-plugin";
+var MANIFEST_NAME = "marketplace.json";
+var MAX_ASCEND = 5;
+async function exists(path) {
+  try {
+    await (0, import_promises2.access)(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+async function findMarketplaceManifest(startDir) {
+  let dir = (0, import_node_path2.resolve)(startDir);
+  for (let i = 0; i <= MAX_ASCEND; i++) {
+    const candidate = (0, import_node_path2.join)(dir, MANIFEST_DIR, MANIFEST_NAME);
+    if (await exists(candidate)) return candidate;
+    if (await exists((0, import_node_path2.join)(dir, ".git"))) return null;
+    const parent = (0, import_node_path2.dirname)(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return null;
+}
+function compareVersions(a, b) {
+  const pa = a.split(".");
+  const pb = b.split(".");
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const na = Number(pa[i] ?? 0) || 0;
+    const nb = Number(pb[i] ?? 0) || 0;
+    if (na !== nb) return na - nb;
+  }
+  return 0;
+}
+async function validateMarketplace(manifestPath) {
+  const result = {
+    path: manifestPath,
+    diagnostics: []
+  };
+  const root = (0, import_node_path2.dirname)((0, import_node_path2.dirname)(manifestPath));
+  let manifest;
+  try {
+    manifest = JSON.parse(await (0, import_promises2.readFile)(manifestPath, "utf-8"));
+  } catch (e) {
+    result.diagnostics.push({
+      severity: "error",
+      field: "marketplace.json",
+      message: `Invalid JSON: ${e instanceof Error ? e.message : String(e)}`
+    });
+    return result;
+  }
+  if (manifest === null || typeof manifest !== "object" || Array.isArray(manifest)) {
+    result.diagnostics.push({
+      severity: "error",
+      field: "marketplace.json",
+      message: "marketplace.json must be a JSON object."
+    });
+    return result;
+  }
+  const record = manifest;
+  const entries = Array.isArray(record.plugins) ? record.plugins : [];
+  if (!Array.isArray(record.plugins)) {
+    result.diagnostics.push({
+      severity: "error",
+      field: "plugins",
+      message: "marketplace.json is missing a `plugins` array."
+    });
+    return result;
+  }
+  const pluginVersions = [];
+  for (const entry of entries) {
+    const name = typeof entry?.name === "string" ? entry.name : "<unnamed>";
+    if (typeof entry?.source !== "string" || entry.source.length === 0) {
+      result.diagnostics.push({
+        severity: "error",
+        field: `plugins["${name}"]`,
+        message: "Missing `source`."
+      });
+      continue;
+    }
+    if (/^[a-z][a-z0-9+.-]*:/i.test(entry.source)) continue;
+    const pluginPath = (0, import_node_path2.resolve)(root, entry.source, "plugin.json");
+    let plugin;
+    try {
+      plugin = JSON.parse(await (0, import_promises2.readFile)(pluginPath, "utf-8"));
+    } catch {
+      result.diagnostics.push({
+        severity: "error",
+        field: `plugins["${name}"]`,
+        message: `\`source\` '${entry.source}' does not contain a readable plugin.json.`
+      });
+      continue;
+    }
+    const declared = entry.version;
+    const actual = plugin.version;
+    if (declared !== void 0 || actual !== void 0) {
+      if (declared !== actual) {
+        result.diagnostics.push({
+          severity: "error",
+          field: `plugins["${name}"].version`,
+          message: `Version drift: marketplace.json declares ${JSON.stringify(declared)} but ${entry.source}/plugin.json declares ${JSON.stringify(actual)}.`
+        });
+      }
+    }
+    if (typeof actual === "string") pluginVersions.push(actual);
+  }
+  const metadata = record.metadata !== null && typeof record.metadata === "object" && !Array.isArray(record.metadata) ? record.metadata : void 0;
+  const metaVersion = metadata?.version;
+  if (typeof metaVersion === "string" && pluginVersions.length > 0) {
+    const highest = pluginVersions.reduce(
+      (a, b) => compareVersions(a, b) >= 0 ? a : b
+    );
+    if (metaVersion !== highest) {
+      result.diagnostics.push({
+        severity: "error",
+        field: "metadata.version",
+        message: `Version drift: metadata.version is ${JSON.stringify(metaVersion)} but the highest plugin version is ${JSON.stringify(highest)}.`
+      });
+    }
+  }
+  return result;
 }
 
 // src/parser.ts
@@ -7699,17 +7824,28 @@ async function lintSkills(rootPath, options = {}) {
       else warningCount++;
     }
   }
-  return { skills, errorCount, warningCount };
+  let marketplace;
+  if (options.marketplace !== false) {
+    const manifestPath = await findMarketplaceManifest(rootPath);
+    if (manifestPath) {
+      marketplace = await validateMarketplace(manifestPath);
+      for (const d of marketplace.diagnostics) {
+        if (d.severity === "error") errorCount++;
+        else warningCount++;
+      }
+    }
+  }
+  return marketplace ? { skills, marketplace, errorCount, warningCount } : { skills, errorCount, warningCount };
 }
 async function lintSkill(skillDir, options = {}) {
-  const dirName = (0, import_node_path2.basename)(skillDir);
+  const dirName = (0, import_node_path3.basename)(skillDir);
   const result = { path: skillDir, diagnostics: [] };
   let content;
   try {
-    content = await (0, import_promises2.readFile)((0, import_node_path2.join)(skillDir, "SKILL.md"), "utf-8");
+    content = await (0, import_promises3.readFile)((0, import_node_path3.join)(skillDir, "SKILL.md"), "utf-8");
   } catch {
     try {
-      content = await (0, import_promises2.readFile)((0, import_node_path2.join)(skillDir, "skill.md"), "utf-8");
+      content = await (0, import_promises3.readFile)((0, import_node_path3.join)(skillDir, "skill.md"), "utf-8");
     } catch {
       result.diagnostics.push({
         severity: "error",
@@ -7740,17 +7876,17 @@ async function lintSkill(skillDir, options = {}) {
   return result;
 }
 async function checkReferenceExistence(skillDir, body, result) {
-  const skillRoot = (0, import_node_path2.resolve)(skillDir);
+  const skillRoot = (0, import_node_path3.resolve)(skillDir);
   const seen = /* @__PURE__ */ new Set();
   for (const ref of extractBodyReferences(body)) {
     const cleanRef = ref.split("#")[0].split("?")[0];
     if (!cleanRef || seen.has(cleanRef)) continue;
     seen.add(cleanRef);
-    if ((0, import_node_path2.isAbsolute)(cleanRef)) continue;
-    const resolved = (0, import_node_path2.resolve)(skillRoot, cleanRef);
+    if ((0, import_node_path3.isAbsolute)(cleanRef)) continue;
+    const resolved = (0, import_node_path3.resolve)(skillRoot, cleanRef);
     if (!resolved.startsWith(skillRoot)) continue;
     try {
-      await (0, import_promises2.access)(resolved);
+      await (0, import_promises3.access)(resolved);
     } catch {
       result.diagnostics.push({
         severity: "warning",
@@ -7791,19 +7927,24 @@ Options:
   --quiet, -q   Only show errors, suppress warnings
   --claude      Enable Claude.ai-specific checks (reserved-word names,
                 angle brackets in description) \u2014 not part of the
-                agentskills.io spec`);
+                agentskills.io spec
+  --no-marketplace
+                Skip the .claude-plugin/marketplace.json version-drift
+                check (it is auto-detected and skipped anyway when no
+                manifest exists)`);
     process.exit(0);
   }
   const jsonOutput = args.includes("--json");
   const quiet = args.includes("--quiet") || args.includes("-q");
   const claude = args.includes("--claude");
+  const marketplace = !args.includes("--no-marketplace");
   const pathArg = args.find((a) => !a.startsWith("-"));
-  const rootPath = (0, import_node_path3.resolve)(pathArg || ".");
-  const result = await lintSkills(rootPath, { claude });
+  const rootPath = (0, import_node_path4.resolve)(pathArg || ".");
+  const result = await lintSkills(rootPath, { claude, marketplace });
   if (jsonOutput) {
     console.log(JSON.stringify(result, null, 2));
   } else {
-    if (result.skills.length === 0) {
+    if (result.skills.length === 0 && !result.marketplace) {
       console.log(`${COLORS.yellow}No skills found in ${rootPath}${COLORS.reset}`);
       process.exit(0);
     }
@@ -7822,6 +7963,21 @@ Options:
       }
       console.log();
     }
+    if (result.marketplace) {
+      const mp = result.marketplace;
+      const filtered = quiet ? mp.diagnostics.filter((d) => d.severity === "error") : mp.diagnostics;
+      if (filtered.length === 0) {
+        if (!quiet) {
+          console.log(`${COLORS.green}pass${COLORS.reset} marketplace`);
+        }
+      } else {
+        console.log(`${COLORS.bold}marketplace${COLORS.reset} ${COLORS.dim}(${mp.path})${COLORS.reset}`);
+        for (const d of filtered) {
+          console.log(formatDiagnostic(d));
+        }
+        console.log();
+      }
+    }
     const parts = [];
     if (result.errorCount > 0) {
       parts.push(`${COLORS.red}${result.errorCount} error${result.errorCount === 1 ? "" : "s"}${COLORS.reset}`);
@@ -7831,9 +7987,12 @@ Options:
     }
     if (parts.length > 0) {
       console.log(parts.join(", "));
+    } else if (result.skills.length === 0) {
+      console.log(`${COLORS.green}Marketplace manifest passed${COLORS.reset}`);
     } else {
+      const suffix = result.marketplace ? " and the marketplace manifest" : "";
       console.log(
-        `${COLORS.green}All ${result.skills.length} skill${result.skills.length === 1 ? "" : "s"} passed${COLORS.reset}`
+        `${COLORS.green}All ${result.skills.length} skill${result.skills.length === 1 ? "" : "s"}${suffix} passed${COLORS.reset}`
       );
     }
   }
