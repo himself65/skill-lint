@@ -34,9 +34,10 @@ async function walk(
     return;
   }
 
-  // Check if this directory itself is a skill
+  // Check if this directory itself is a skill. Any casing counts, so that a
+  // misnamed file is linted (and reported) rather than silently skipped.
   const hasSkillMd = entries.some(
-    (e) => e.isFile() && (e.name === "SKILL.md" || e.name === "skill.md")
+    (e) => e.isFile() && e.name.toLowerCase() === "skill.md"
   );
 
   if (hasSkillMd) {

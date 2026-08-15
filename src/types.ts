@@ -53,6 +53,13 @@ export interface ValidateOptions {
    * @default false
    */
   claude?: boolean;
+  /**
+   * Treat Claude Code frontmatter extensions (`context`, `model`, `paths`, …)
+   * as valid instead of reporting them. They load in Claude Code but are
+   * rejected by claude.ai uploads and the Skills API, so this is opt-in.
+   * @default false
+   */
+  claudeCode?: boolean;
 }
 
 export interface LintOptions extends ValidateOptions {

@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { extractBodyReferences, validate } from "../src/validator.js";
+import {
+  extractBodyReferences,
+  extractBundledPaths,
+  validate,
+} from "../src/validator.js";
 import type { SkillFrontmatter, ValidateOptions } from "../src/types.js";
 
 function diagnostics(
@@ -273,7 +277,7 @@ describe("validate", () => {
 
   describe("body", () => {
     it("warns when body exceeds 500 lines", () => {
-      const longBody = "\n".repeat(501);
+      const longBody = "step\n".repeat(501);
       const d = diagnostics({ name: "test", description: "A skill." }, undefined, longBody);
       const bodyWarnings = d.filter((dd) => dd.field === "body");
       expect(bodyWarnings).toContainEqual(
@@ -335,6 +339,123 @@ describe("validate", () => {
         expect.objectContaining({ message: expect.stringContaining("must be a mapping") })
       );
     });
+  });
+});
+
+describe("validate (added rules)", () => {
+  describe("name", () => {
+    it("accepts a non-ASCII name, as the spec allows", () => {
+      const d = errors({ name: "数据分析", description: "A skill." }, "数据分析");
+      expect(d).toHaveLength(0);
+    });
+
+    it("matches a name against a differently normalized directory name", () => {
+      // "café" composed (NFC) in frontmatter vs decomposed (NFD) on disk.
+      const d = errors({ name: "café", description: "A skill." }, "café");
+      expect(d).toHaveLength(0);
+    });
+  });
+
+  describe("claude code extension fields", () => {
+    it("reports extension fields separately from unknown ones", () => {
+      const d = errors({
+        name: "test",
+        description: "A skill.",
+        context: "fork",
+        nonsense: true,
+      });
+      expect(d).toContainEqual(
+        expect.objectContaining({
+          message: expect.stringContaining("Claude Code extension fields"),
+        })
+      );
+      expect(d).toContainEqual(
+        expect.objectContaining({
+          message: expect.stringContaining("Unexpected fields in frontmatter: nonsense"),
+        })
+      );
+    });
+
+    it("accepts extension fields with claudeCode enabled", () => {
+      const d = errors(
+        { name: "test", description: "A skill.", context: "fork", model: "opus" },
+        undefined,
+        undefined,
+        { claudeCode: true }
+      );
+      expect(d).toHaveLength(0);
+    });
+
+    it("still rejects unknown fields with claudeCode enabled", () => {
+      const d = errors(
+        { name: "test", description: "A skill.", nonsense: true },
+        undefined,
+        undefined,
+        { claudeCode: true }
+      );
+      expect(d).toContainEqual(
+        expect.objectContaining({ message: expect.stringContaining("Unexpected fields") })
+      );
+    });
+  });
+
+  describe("allowed-tools", () => {
+    it("warns on a comma-separated list", () => {
+      const w = warnings({
+        name: "test",
+        description: "A skill.",
+        "allowed-tools": "Read, Grep",
+      });
+      expect(w).toContainEqual(
+        expect.objectContaining({ message: expect.stringContaining("comma-separated") })
+      );
+    });
+
+    it("does not warn about commas inside a tool pattern", () => {
+      const w = warnings({
+        name: "test",
+        description: "A skill.",
+        "allowed-tools": "WebFetch(domain:a.com,b.com) Read",
+      });
+      expect(w).toHaveLength(0);
+    });
+
+    it("warns on unbalanced parentheses", () => {
+      const w = warnings({
+        name: "test",
+        description: "A skill.",
+        "allowed-tools": "Bash(git status Read",
+      });
+      expect(w).toContainEqual(
+        expect.objectContaining({ message: expect.stringContaining("unbalanced parentheses") })
+      );
+    });
+  });
+
+  describe("body", () => {
+    it("warns when the body is empty", () => {
+      const w = warnings({ name: "test", description: "A skill." }, undefined, "\n  \n");
+      expect(w).toContainEqual(
+        expect.objectContaining({ message: expect.stringContaining("no content after the frontmatter") })
+      );
+    });
+  });
+});
+
+describe("extractBundledPaths", () => {
+  it("extracts plain-text and code-span paths under the spec directories", () => {
+    const body =
+      "Run `scripts/extract.py`, read references/GUIDE.md, apply ./assets/template.docx.";
+    expect(extractBundledPaths(body).sort()).toEqual([
+      "assets/template.docx",
+      "references/GUIDE.md",
+      "scripts/extract.py",
+    ]);
+  });
+
+  it("ignores paths outside the spec directories and bare directory names", () => {
+    const body = "Edit src/app.ts, then look at scripts/ and https://x.dev/scripts/a.py.";
+    expect(extractBundledPaths(body)).toEqual([]);
   });
 });
 

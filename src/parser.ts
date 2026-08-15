@@ -11,6 +11,12 @@ export interface ParseResult {
  * Throws if the file doesn't have valid YAML frontmatter.
  */
 export function parseSkillMd(content: string): ParseResult {
+  // Editors that write a UTF-8 BOM would otherwise make the frontmatter
+  // look like it never starts with `---`.
+  if (content.charCodeAt(0) === 0xfeff) {
+    content = content.slice(1);
+  }
+
   if (!content.startsWith("---")) {
     throw new Error("SKILL.md must start with YAML frontmatter (---)");
   }
