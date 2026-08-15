@@ -37,6 +37,9 @@ Options:
   --claude      Enable Claude.ai-specific checks (reserved-word names,
                 angle brackets in description) — not part of the
                 agentskills.io spec
+  --claude-code Accept Claude Code frontmatter extensions (context, model,
+                paths, …) instead of reporting them. They are rejected by
+                claude.ai uploads and the Skills API
   --no-marketplace
                 Skip the .claude-plugin/marketplace.json version-drift
                 check (it is auto-detected and skipped anyway when no
@@ -47,11 +50,12 @@ Options:
   const jsonOutput = args.includes("--json");
   const quiet = args.includes("--quiet") || args.includes("-q");
   const claude = args.includes("--claude");
+  const claudeCode = args.includes("--claude-code");
   const marketplace = !args.includes("--no-marketplace");
   const pathArg = args.find((a) => !a.startsWith("-"));
   const rootPath = resolve(pathArg || ".");
 
-  const result = await lintSkills(rootPath, { claude, marketplace });
+  const result = await lintSkills(rootPath, { claude, claudeCode, marketplace });
 
   if (jsonOutput) {
     console.log(JSON.stringify(result, null, 2));

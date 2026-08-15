@@ -9,15 +9,42 @@ const ALLOWED_FIELDS = new Set([
   "compatibility",
 ]);
 
+/**
+ * Frontmatter fields Claude Code understands that the agentskills.io spec does
+ * not define. They load fine in Claude Code, but claude.ai uploads and the
+ * Skills API reject them ("Unexpected key(s) in SKILL.md frontmatter"), so they
+ * are reported unless `--claude-code` says that is the only target.
+ */
+const CLAUDE_CODE_FIELDS = new Set([
+  "when_to_use",
+  "argument-hint",
+  "arguments",
+  "disable-model-invocation",
+  "user-invocable",
+  "disallowed-tools",
+  "model",
+  "effort",
+  "context",
+  "agent",
+  "background",
+  "hooks",
+  "paths",
+  "shell",
+]);
+
 const CLAUDE_RESERVED_WORDS = ["anthropic", "claude"];
 
 const NAME_MAX_LENGTH = 64;
 const DESCRIPTION_MAX_LENGTH = 1024;
 const COMPATIBILITY_MAX_LENGTH = 500;
-const NAME_PATTERN = /^[a-z0-9-]+$/;
+// The spec allows unicode alphanumerics, not just ASCII — case is checked separately.
+const NAME_PATTERN = /^[\p{L}\p{N}-]+$/u;
 const BODY_MAX_LINES = 500;
 const BODY_MAX_TOKENS = 5000;
 const CHARS_PER_TOKEN = 4; // Rough Anthropic estimate
+
+/** Directories the spec reserves for bundled resources. */
+const BUNDLED_DIRS = ["scripts", "references", "assets"];
 
 export function estimateTokens(text: string): number {
   return Math.ceil(text.length / CHARS_PER_TOKEN);
@@ -43,6 +70,27 @@ export function extractBodyReferences(body: string): string[] {
 }
 
 /**
+ * Extract references to bundled resources written as plain text rather than as
+ * Markdown links — `scripts/extract.py` in a command line, or
+ * `` `references/GUIDE.md` `` in a code span. The spec's own examples reference
+ * bundled files this way, so link-only extraction misses most of them.
+ *
+ * Only paths rooted at a spec-reserved directory are returned, which keeps
+ * unrelated paths (a user's `src/app.ts`, an output file) out of the results.
+ */
+export function extractBundledPaths(body: string): string[] {
+  const pattern = new RegExp(
+    `(?<![\\w./-])(?:\\./)?(?:${BUNDLED_DIRS.join("|")})/[\\w.-]+(?:/[\\w.-]+)*\\.\\w+`,
+    "g"
+  );
+  const refs = new Set<string>();
+  for (const match of body.matchAll(pattern)) {
+    refs.add(match[0].replace(/^\.\//, ""));
+  }
+  return [...refs];
+}
+
+/**
  * Strip URL fragment/query from a relative path and split it into segments.
  */
 function pathSegments(ref: string): string[] {
@@ -65,15 +113,27 @@ export function validate(
 ): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
   const claude = options.claude ?? false;
+  const claudeCode = options.claudeCode ?? false;
 
-  const unexpectedFields = Object.keys(frontmatter).filter(
+  const extraFields = Object.keys(frontmatter).filter(
     (k) => !ALLOWED_FIELDS.has(k)
   );
+  const claudeCodeFields = extraFields.filter((k) => CLAUDE_CODE_FIELDS.has(k));
+  const unexpectedFields = extraFields.filter((k) => !CLAUDE_CODE_FIELDS.has(k));
+
   if (unexpectedFields.length > 0) {
     diagnostics.push({
       severity: "error",
       field: "frontmatter",
       message: `Unexpected fields in frontmatter: ${unexpectedFields.join(", ")}. Only ${[...ALLOWED_FIELDS].sort().join(", ")} are allowed.`,
+    });
+  }
+
+  if (!claudeCode && claudeCodeFields.length > 0) {
+    diagnostics.push({
+      severity: "error",
+      field: "frontmatter",
+      message: `Claude Code extension fields in frontmatter: ${claudeCodeFields.join(", ")}. These load in Claude Code but are rejected by claude.ai uploads and the Skills API. Pass --claude-code if Claude Code is the only target.`,
     });
   }
 
@@ -179,7 +239,10 @@ function validateName(
     }
   }
 
-  if (dirName !== undefined && name !== dirName) {
+  // Compare normalized: macOS stores directory names decomposed (NFD), so a
+  // non-ASCII name matching its directory byte-for-byte in the repo would
+  // otherwise be reported as a mismatch.
+  if (dirName !== undefined && name.normalize("NFKC") !== dirName.normalize("NFKC")) {
     diagnostics.push({
       severity: "error",
       field: "name",
@@ -291,6 +354,28 @@ function validateAllowedTools(
       field: "allowed-tools",
       message: "Field 'allowed-tools' must be a non-empty string",
     });
+    return;
+  }
+
+  // Commas inside a pattern's parentheses are part of the pattern; commas
+  // outside them mean the list was written comma-separated.
+  if (allowedTools.replace(/\([^)]*\)?/g, "").includes(",")) {
+    diagnostics.push({
+      severity: "warning",
+      field: "allowed-tools",
+      message:
+        "Field 'allowed-tools' looks comma-separated. The spec defines it as a space-separated string — Claude Code tolerates commas, other clients may not.",
+    });
+  }
+
+  const opened = (allowedTools.match(/\(/g) ?? []).length;
+  const closed = (allowedTools.match(/\)/g) ?? []).length;
+  if (opened !== closed) {
+    diagnostics.push({
+      severity: "warning",
+      field: "allowed-tools",
+      message: `Field 'allowed-tools' has unbalanced parentheses (${opened} '(' vs ${closed} ')'), so at least one tool pattern will not match.`,
+    });
   }
 }
 
@@ -326,6 +411,16 @@ function validateMetadata(
 }
 
 function validateBody(body: string, diagnostics: Diagnostic[]): void {
+  if (body.trim().length === 0) {
+    diagnostics.push({
+      severity: "warning",
+      field: "body",
+      message:
+        "SKILL.md has no content after the frontmatter. The body holds the instructions an agent follows once the skill activates.",
+    });
+    return;
+  }
+
   const lineCount = body.split("\n").length;
   const tokens = estimateTokens(body);
 

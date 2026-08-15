@@ -17,6 +17,10 @@ inputs:
     description: 'Enable Claude.ai-specific checks (reserved-word names, angle brackets in description). Not part of the agentskills.io spec.'
     required: false
     default: 'false'
+  claude-code:
+    description: 'Accept Claude Code frontmatter extensions (context, model, paths, …) instead of reporting them. They are rejected by claude.ai uploads and the Skills API.'
+    required: false
+    default: 'false'
   marketplace:
     description: 'Check .claude-plugin/marketplace.json for version drift against the plugin manifests it points at. Auto-detected — repositories without a manifest are unaffected. Set to false to skip.'
     required: false
@@ -34,6 +38,9 @@ runs:
         fi
         if [ "${{ inputs.claude }}" = "true" ]; then
           ARGS="$ARGS --claude"
+        fi
+        if [ "${{ inputs['claude-code'] }}" = "true" ]; then
+          ARGS="$ARGS --claude-code"
         fi
         if [ "${{ inputs.marketplace }}" = "false" ]; then
           ARGS="$ARGS --no-marketplace"
