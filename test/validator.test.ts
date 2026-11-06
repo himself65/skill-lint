@@ -166,21 +166,36 @@ describe("validate", () => {
       );
     });
 
-    it("does not flag angle brackets by default (spec compliance)", () => {
+    it("does not flag XML tags by default (spec compliance)", () => {
       const d = errors({ name: "test", description: "Uses <html> tags." });
-      expect(d.some((e) => e.message.includes("angle brackets"))).toBe(false);
+      expect(d.some((e) => e.message.includes("XML tags"))).toBe(false);
     });
 
-    it("flags angle brackets when --claude is enabled", () => {
-      const d = errors(
-        { name: "test", description: "Uses <html> tags." },
-        undefined,
-        undefined,
-        { claude: true }
-      );
+    it.each([
+      "Uses <html> tags.",
+      "Wrap output in <example>...</example>.",
+      "Ends with a closing </foo> tag.",
+      "Line break<br/> here.",
+      'Link <a href="https://example.com">here</a>.',
+      "Namespaced <xsl:template> tag.",
+    ])("flags XML tags when --claude is enabled: %s", (description) => {
+      const d = errors({ name: "test", description }, undefined, undefined, { claude: true });
       expect(d).toContainEqual(
-        expect.objectContaining({ message: expect.stringContaining("angle brackets") })
+        expect.objectContaining({
+          message: "SKILL.md description cannot contain XML tags (Claude.ai-specific)",
+        })
       );
+    });
+
+    it.each([
+      "Use when x < 10 and y > 5.",
+      "Maps input -> output.",
+      "Holds when a<b, never a>b.",
+      "Pass <> or < > as a placeholder.",
+      "Handles 1 < 2 <= 3.",
+    ])("does not flag non-tag angle brackets as XML tags: %s", (description) => {
+      const d = errors({ name: "test", description }, undefined, undefined, { claude: true });
+      expect(d.some((e) => e.message.includes("XML tags"))).toBe(false);
     });
   });
 

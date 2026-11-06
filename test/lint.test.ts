@@ -31,16 +31,16 @@ describe("lintSkill", () => {
     expect(errors.some((e) => e.message.includes("1024 character limit"))).toBe(true);
   });
 
-  it("does NOT report angle brackets by default (spec compliance)", async () => {
-    const result = await lintSkill(join(FIXTURES, "angle-brackets"));
+  it("does NOT report XML tags by default (spec compliance)", async () => {
+    const result = await lintSkill(join(FIXTURES, "xml-tags"));
     const errors = result.diagnostics.filter((d) => d.severity === "error");
-    expect(errors.some((e) => e.message.includes("angle brackets"))).toBe(false);
+    expect(errors.some((e) => e.message.includes("XML tags"))).toBe(false);
   });
 
-  it("reports angle brackets when --claude is enabled", async () => {
-    const result = await lintSkill(join(FIXTURES, "angle-brackets"), { claude: true });
+  it("reports XML tags when --claude is enabled", async () => {
+    const result = await lintSkill(join(FIXTURES, "xml-tags"), { claude: true });
     const errors = result.diagnostics.filter((d) => d.severity === "error");
-    expect(errors.some((e) => e.message.includes("angle brackets"))).toBe(true);
+    expect(errors.some((e) => e.message.includes("XML tags"))).toBe(true);
   });
 
   it("reports extra frontmatter fields", async () => {

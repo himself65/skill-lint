@@ -36,6 +36,8 @@ const CLAUDE_RESERVED_WORDS = ["anthropic", "claude"];
 
 const NAME_MAX_LENGTH = 64;
 const DESCRIPTION_MAX_LENGTH = 1024;
+/** Opening, closing or self-closing XML-like tag: `<example>`, `</foo>`, `<br/>`, `<a href="x">`. */
+const XML_TAG_PATTERN = /<\/?[A-Za-z][\w.:-]*(?:\s[^<>]*)?\/?>/;
 const COMPATIBILITY_MAX_LENGTH = 500;
 // The spec allows unicode alphanumerics, not just ASCII — case is checked separately.
 const NAME_PATTERN = /^[\p{L}\p{N}-]+$/u;
@@ -282,11 +284,11 @@ function validateDescription(
     });
   }
 
-  if (claude && /<|>/.test(description)) {
+  if (claude && XML_TAG_PATTERN.test(description)) {
     diagnostics.push({
       severity: "error",
       field: "description",
-      message: "Description cannot contain angle brackets (< or >) (Claude.ai-specific)",
+      message: "SKILL.md description cannot contain XML tags (Claude.ai-specific)",
     });
   }
 }

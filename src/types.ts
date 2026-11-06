@@ -48,7 +48,7 @@ export interface LintResult {
 
 export interface ValidateOptions {
   /**
-   * Enable Claude.ai-specific checks (reserved-word names, angle brackets in description).
+   * Enable Claude.ai-specific checks (reserved-word names, XML tags in description).
    * These are NOT part of the agentskills.io spec.
    * @default false
    */

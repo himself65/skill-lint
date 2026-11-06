@@ -35,7 +35,7 @@ Options:
   --json        Output results as JSON
   --quiet, -q   Only show errors, suppress warnings
   --claude      Enable Claude.ai-specific checks (reserved-word names,
-                angle brackets in description) — not part of the
+                XML tags in description) — not part of the
                 agentskills.io spec
   --claude-code Accept Claude Code frontmatter extensions (context, model,
                 paths, …) instead of reporting them. They are rejected by
