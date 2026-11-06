@@ -1,6 +1,6 @@
 ---
-name: angle-brackets
+name: xml-tags
 description: This skill uses <html> tags in the description.
 ---
 
-# Angle Brackets
+# XML Tags

@@ -14,7 +14,7 @@ inputs:
     required: false
     default: 'false'
   claude:
-    description: 'Enable Claude.ai-specific checks (reserved-word names, angle brackets in description). Not part of the agentskills.io spec.'
+    description: 'Enable Claude.ai-specific checks (reserved-word names, XML tags in description). Not part of the agentskills.io spec.'
     required: false
     default: 'false'
   claude-code:

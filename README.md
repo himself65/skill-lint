@@ -2,7 +2,7 @@
 
 Validate [Agent Skills](https://agentskills.io) (`SKILL.md`) for Claude.ai, Claude Code, and other agents.
 
-Catches errors **before** uploading to Claude.ai Web — name format, description length, angle brackets, disallowed frontmatter fields, and more.
+Catches errors **before** uploading to Claude.ai Web — name format, description length, XML tags, disallowed frontmatter fields, and more.
 
 ## Usage
 
@@ -44,7 +44,7 @@ skill-lint ./skills
 |------|-------------|
 | `--json` | Output results as JSON |
 | `--quiet`, `-q` | Only show errors (suppress warnings) |
-| `--claude` | Enable Claude.ai-specific checks (reserved-word names, angle brackets in description) |
+| `--claude` | Enable Claude.ai-specific checks (reserved-word names, XML tags in description) |
 | `--claude-code` | Accept Claude Code frontmatter extensions (`context`, `model`, `paths`, …) instead of reporting them |
 | `--no-marketplace` | Skip the plugin marketplace check (auto-detected, so already a no-op when no manifest exists) |
 
@@ -80,7 +80,7 @@ Pass `--claude` (CLI) or set `claude: 'true'` (Action) to enable extra checks sp
 | Rule | Severity | Description |
 |------|----------|-------------|
 | Reserved words | error | Name cannot contain `anthropic` or `claude` |
-| Angle brackets | error | Description cannot contain `<` or `>` |
+| XML tags | error | Description cannot contain XML tags such as `<example>`, `</foo>` or `<br/>` |
 
 ### Claude Code frontmatter extensions (opt-out)
 

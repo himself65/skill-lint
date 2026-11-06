@@ -7584,6 +7584,7 @@ var CLAUDE_CODE_FIELDS = /* @__PURE__ */ new Set([
 var CLAUDE_RESERVED_WORDS = ["anthropic", "claude"];
 var NAME_MAX_LENGTH = 64;
 var DESCRIPTION_MAX_LENGTH = 1024;
+var XML_TAG_PATTERN = /<\/?[A-Za-z][\w.:-]*(?:\s[^<>]*)?\/?>/;
 var COMPATIBILITY_MAX_LENGTH = 500;
 var NAME_PATTERN = /^[\p{L}\p{N}-]+$/u;
 var BODY_MAX_LINES = 500;
@@ -7759,11 +7760,11 @@ function validateDescription(description, diagnostics, claude) {
       message: `Description exceeds ${DESCRIPTION_MAX_LENGTH} character limit (${description.length} chars)`
     });
   }
-  if (claude && /<|>/.test(description)) {
+  if (claude && XML_TAG_PATTERN.test(description)) {
     diagnostics.push({
       severity: "error",
       field: "description",
-      message: "Description cannot contain angle brackets (< or >) (Claude.ai-specific)"
+      message: "SKILL.md description cannot contain XML tags (Claude.ai-specific)"
     });
   }
 }
@@ -8181,7 +8182,7 @@ Options:
   --json        Output results as JSON
   --quiet, -q   Only show errors, suppress warnings
   --claude      Enable Claude.ai-specific checks (reserved-word names,
-                angle brackets in description) \u2014 not part of the
+                XML tags in description) \u2014 not part of the
                 agentskills.io spec
   --claude-code Accept Claude Code frontmatter extensions (context, model,
                 paths, \u2026) instead of reporting them. They are rejected by
