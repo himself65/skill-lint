@@ -7586,6 +7586,7 @@ var NAME_MAX_LENGTH = 64;
 var DESCRIPTION_MAX_LENGTH = 1024;
 var COMPATIBILITY_MAX_LENGTH = 500;
 var NAME_PATTERN = /^[\p{L}\p{N}-]+$/u;
+var XML_TAG_PATTERN = /<\/?[A-Za-z][\w.:-]*(\s[^<>]*)?\/?>/;
 var BODY_MAX_LINES = 500;
 var BODY_MAX_TOKENS = 5e3;
 var CHARS_PER_TOKEN = 4;
@@ -7759,11 +7760,17 @@ function validateDescription(description, diagnostics, claude) {
       message: `Description exceeds ${DESCRIPTION_MAX_LENGTH} character limit (${description.length} chars)`
     });
   }
-  if (claude && /<|>/.test(description)) {
+  if (claude && XML_TAG_PATTERN.test(description)) {
     diagnostics.push({
       severity: "error",
       field: "description",
       message: "Description cannot contain angle brackets (< or >) (Claude.ai-specific)"
+    });
+  } else if (claude && /[<>]/.test(description)) {
+    diagnostics.push({
+      severity: "warning",
+      field: "description",
+      message: "claude.ai stores its description with angle brackets removed. Claude Code reads the full text from the file"
     });
   }
 }
