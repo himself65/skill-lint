@@ -39,6 +39,8 @@ const DESCRIPTION_MAX_LENGTH = 1024;
 const COMPATIBILITY_MAX_LENGTH = 500;
 // The spec allows unicode alphanumerics, not just ASCII — case is checked separately.
 const NAME_PATTERN = /^[\p{L}\p{N}-]+$/u;
+// Tag-shaped text such as <html>, </b> or <br/>. Bare `a < b` or `->` does not match.
+const XML_TAG_PATTERN = /<\/?[A-Za-z][\w.:-]*(\s[^<>]*)?\/?>/;
 const BODY_MAX_LINES = 500;
 const BODY_MAX_TOKENS = 5000;
 const CHARS_PER_TOKEN = 4; // Rough Anthropic estimate
@@ -282,11 +284,18 @@ function validateDescription(
     });
   }
 
-  if (claude && /<|>/.test(description)) {
+  if (claude && XML_TAG_PATTERN.test(description)) {
     diagnostics.push({
       severity: "error",
       field: "description",
       message: "Description cannot contain angle brackets (< or >) (Claude.ai-specific)",
+    });
+  } else if (claude && /[<>]/.test(description)) {
+    diagnostics.push({
+      severity: "warning",
+      field: "description",
+      message:
+        "claude.ai stores its description with angle brackets removed. Claude Code reads the full text from the file",
     });
   }
 }

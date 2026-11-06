@@ -182,6 +182,25 @@ describe("validate", () => {
         expect.objectContaining({ message: expect.stringContaining("angle brackets") })
       );
     });
+
+    it.each(["Use when a < b.", "Maps input -> output.", "Runs if count >= 3."])(
+      "warns instead of erroring on bare angle brackets with --claude: %s",
+      (description) => {
+        const opts = { claude: true };
+        expect(errors({ name: "test", description }, undefined, undefined, opts)).toEqual([]);
+        expect(warnings({ name: "test", description }, undefined, undefined, opts)).toContainEqual(
+          expect.objectContaining({
+            field: "description",
+            message: expect.stringContaining("claude.ai stores its description with angle brackets removed"),
+          })
+        );
+      }
+    );
+
+    it("does not warn on bare angle brackets by default", () => {
+      const d = warnings({ name: "test", description: "Maps input -> output." });
+      expect(d.some((w) => w.message.includes("angle brackets"))).toBe(false);
+    });
   });
 
   describe("frontmatter fields", () => {

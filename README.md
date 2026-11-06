@@ -80,7 +80,8 @@ Pass `--claude` (CLI) or set `claude: 'true'` (Action) to enable extra checks sp
 | Rule | Severity | Description |
 |------|----------|-------------|
 | Reserved words | error | Name cannot contain `anthropic` or `claude` |
-| Angle brackets | error | Description cannot contain `<` or `>` |
+| Angle brackets (tags) | error | Description cannot contain tag-like text such as `<html>` |
+| Angle brackets (other) | warning | Other `<` or `>` (for example `a < b` or `->`) are stripped by claude.ai, while Claude Code reads the full text from the file |
 
 ### Claude Code frontmatter extensions (opt-out)
 
